@@ -1,5 +1,7 @@
 # mini-httpd Implementation Plan
 
+> **Note:** the final implementation diverged from this plan in several areas -- see CLAUDE.md for current conventions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a secure static-file HTTP server in Haskell that hosts `index.html` with path-traversal prevention.
@@ -15,8 +17,8 @@
 | File | Responsibility |
 |------|---------------|
 | `mini-httpd.cabal` | Package metadata, dependencies, build targets |
-| `src/Server.hs` | `serveStatic :: FilePath -> Application` — security checks + static file serving |
-| `src/Main.hs` | CLI arg parsing, PORT env var, warp `run` |
+| `src/Server.hs` | `serveStatic :: FilePath -> Application` -- security checks + static file serving |
+| `app/Main.hs` | CLI arg parsing, PORT env var, warp `run` |
 | `public/index.html` | Default page to serve |
 | `test/Spec.hs` | hspec tests: happy path, 405, path traversal, 404 |
 | `cabal.project` | Optional, pins package set (may not need) |
@@ -138,7 +140,7 @@ serveStatic _ _ respond = respond $ responseLBS status200 [] "stub"
 module Main where
 
 main :: IO ()
-main = putStrLn "mini-httpd — not yet implemented"
+main = putStrLn "mini-httpd -- not yet implemented"
 ```
 
 - [ ] **Step 5: Write placeholder `public/index.html`**
@@ -227,7 +229,7 @@ spec :: Spec
 spec = around withTempDir $ \root -> do
     let app = serveStatic root
 
-    describe "serveStatic — happy path" $ do
+    describe "serveStatic -- happy path" $ do
         it "serves index.html for GET /" $ do
             resp <- runApp app (mkGet "/")
             responseStatus resp `shouldBe` status200
@@ -246,7 +248,7 @@ spec = around withTempDir $ \root -> do
             lookup "Content-Type" hs `shouldSatisfy`
                 maybe False ("text/html" `BS.isInfixOf`)
 
-    describe "serveStatic — HEAD requests" $ do
+    describe "serveStatic -- HEAD requests" $ do
         it "returns 200 for HEAD /" $ do
             resp <- runApp app (mkHead "/")
             responseStatus resp `shouldBe` status200
@@ -256,7 +258,7 @@ spec = around withTempDir $ \root -> do
             body <- responseBodyBS resp
             body `shouldBe` BS.empty
 
-    describe "serveStatic — security" $ do
+    describe "serveStatic -- security" $ do
         it "rejects POST with 405" $ do
             resp <- runApp app (mkPost "/")
             responseStatus resp `shouldBe` status405
@@ -283,7 +285,7 @@ spec = around withTempDir $ \root -> do
             resp <- runApp app (mkGet "/..%2F..%2F..%2Fetc%2Fpasswd")
             responseStatus resp `shouldSatisfy` (`elem` [status404, status400])
 
-    describe "serveStatic — document root" $ do
+    describe "serveStatic -- document root" $ do
         it "serves files from a subdirectory" $ do
             resp <- runApp app (mkGet "/subdir/page.html")
             -- This file doesn't exist in our temp dir, so 404
@@ -305,7 +307,7 @@ withTempDir action =
 cabal test
 ```
 
-Expected: Test failure — stub returns 200 for everything, so tests expecting 404/405 will fail.
+Expected: Test failure -- stub returns 200 for everything, so tests expecting 404/405 will fail.
 
 ---
 
@@ -388,7 +390,7 @@ resolveSafe root reqPath = do
     absFull <- makeAbsolute fullPath
     -- Try canonicalizing the full path (works when file exists).
     -- If file doesn't exist, canonicalize the parent directory and
-    -- reconstruct — still catching traversal via nonexistent paths.
+    -- reconstruct -- still catching traversal via nonexistent paths.
     result <- try (canonicalizePath absFull) :: IO (Either IOException FilePath)
     case result of
       Right canPath

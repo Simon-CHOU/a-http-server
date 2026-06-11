@@ -1,4 +1,4 @@
-# mini-httpd — Design Spec
+# mini-httpd -- Design Spec
 
 **Date:** 2026-06-11
 **Status:** Approved
@@ -13,43 +13,49 @@ A single-package Haskell (Cabal) project: a secure static file HTTP server. Serv
 mini-httpd/
   public/
     index.html          # Default served file
-  src/
+  app/
     Main.hs             # Entry point: config, warp setup
+  src/
     Server.hs           # WAI application + security logic
   mini-httpd.cabal
 ```
 
-Two modules, ~80 lines total.
+Two modules.
 
 ## Security Model
 
-| Concern          | Mechanism                                          |
-| ---------------- | -------------------------------------------------- |
-| Path traversal   | Canonicalize resolved path; verify it starts with serve-root |
-| Symlink escapes  | `canonicalizePath` resolves symlinks before prefix check |
-| Request method   | Only GET and HEAD allowed; 405 for all others      |
-| Malformed URLs    | 400 Bad Request on decode failure                  |
-| Resource limits  | Warp default settings (slowloris protection, timeouts, header limits) |
-| Info disclosure  | No directory listings; minimal error messages      |
-| Content sniffing | Content-Type set from file extension via `mime-types` |
+| Concern            | Mechanism                                                      |
+| ------------------ | -------------------------------------------------------------- |
+| Path traversal     | Canonicalize resolved path; verify it starts with serve-root   |
+| Symlink escapes    | `canonicalizePath` resolves symlinks before prefix check        |
+| Request method     | Only GET and HEAD allowed; 405 for all others                  |
+| Document root guard| `doesDirectoryExist` check at startup; root `/` is rejected    |
+| Resource limits    | Warp default settings (slowloris protection, timeouts, header limits) |
+| Info disclosure    | No directory listings; traversal and missing-file both return 404 |
+| Content sniffing   | Content-Type set from file extension via `mime-types`          |
+| Server header      | `setServerName "mini-httpd"` suppresses warp version leak      |
+| Security headers   | `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`  |
 
 ## Data Flow
 
 ```
-Client → Warp (HTTP/TCP) → WAI Application (Server.hs)
-  ├─ Method check → GET/HEAD only, else 405
-  ├─ Path decode + canonicalize → bad path → 400
-  ├─ Prefix check → outside root? → 404 (don't leak existence)
-  └─ Read file → success → 200 + Content-Type
-              └─ not found → 404
+Client -> Warp (HTTP/TCP) -> WAI Application (Server.hs)
+  |- Method check -> GET/HEAD only, else 405
+  |- Path decode + canonicalize -> bad path -> 404 (no info leak)
+  |- Prefix check -> outside root? -> 404 (don't leak existence)
+  |- Read file -> success -> 200 + Content-Type + security headers
+  |            +-> not found -> 404
+  |- Request logging printed to stderr after response sent
+  |- IOException discrimination: does-not-exist vs. real I/O errors
 ```
 
 ## Key Design Decisions
 
-1. **warp + wai** rather than hand-rolled HTTP — eliminates HTTP-parsing attack surface
-2. **Custom static serving** rather than `wai-middleware-static` — the middleware adds directory listings and index-file redirects we don't want; our ~30-line version is tighter
-3. **404 for out-of-root paths** — don't distinguish "doesn't exist" from "not allowed" (no info leak)
-4. **No directory listings** — security by default
+1. **warp + wai** rather than hand-rolled HTTP -- eliminates HTTP-parsing attack surface
+2. **Custom static serving** rather than `wai-middleware-static` -- the middleware adds directory listings and index-file redirects we don't want; our version is tighter
+3. **404 for out-of-root paths** -- don't distinguish "doesn't exist" from "not allowed" (no info leak)
+4. **No directory listings** -- security by default
+5. **Server header suppression** -- `setServerName` sets a custom server name instead of leaking the warp version string
 
 ## Dependencies
 
@@ -71,7 +77,6 @@ Client → Warp (HTTP/TCP) → WAI Application (Server.hs)
 - CGI / reverse proxy
 - Range requests
 - Caching headers
-- Logging beyond warp defaults
 
 ## Interface
 
@@ -80,4 +85,4 @@ PORT=8080 mini-httpd          # env var, default 8080
 mini-httpd --root ./public    # CLI flag, default ./public
 ```
 
-Both optional — zero-config for the happy path.
+Both optional -- zero-config for the happy path.
