@@ -1,0 +1,24 @@
+# Cabal build artifacts
+dist-newstyle/
+dist/
+
+# GHC compiled objects
+*.o
+*.hi
+*.dyn_o
+*.dyn_hi
+
+# Cabal sandbox
+.cabal-sandbox/
+cabal.sandbox.config
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
