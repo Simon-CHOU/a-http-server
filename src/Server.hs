@@ -8,7 +8,8 @@ import System.FilePath ((</>), takeDirectory, takeFileName, takeExtension)
 import System.Directory (canonicalizePath, makeAbsolute, doesFileExist)
 import Control.Exception (try, IOException)
 import Data.List (isPrefixOf)
-import Data.Text (Text, intercalate, unpack, pack)
+import Data.Text (Text, intercalate, unpack)
+import qualified Data.Text as T
 import Network.Mime (defaultMimeLookup)
 import qualified Data.ByteString.Lazy as BL
 
@@ -38,7 +39,7 @@ serveFile root isHead req respond = do
           exists <- doesFileExist filePath
           if exists
             then do
-                let mimeExt = pack $ takeExtension filePath
+                let mimeExt = T.pack $ takeExtension filePath
                 let mimeCt  = defaultMimeLookup mimeExt
                 let headers = [(hContentType, mimeCt)]
                 if isHead
