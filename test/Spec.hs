@@ -60,6 +60,20 @@ mkDelete path = defaultRequest
     , pathInfo = decodePathSegments path
     }
 
+mkConnect :: BS.ByteString -> Request
+mkConnect path = defaultRequest
+    { requestMethod = "CONNECT"
+    , rawPathInfo = path
+    , pathInfo = decodePathSegments path
+    }
+
+mkOptions :: BS.ByteString -> Request
+mkOptions path = defaultRequest
+    { requestMethod = "OPTIONS"
+    , rawPathInfo = path
+    , pathInfo = decodePathSegments path
+    }
+
 -- | Response body as strict ByteString
 responseBodyBS :: Response -> IO BS.ByteString
 responseBodyBS (ResponseBuilder _ _ b) =
@@ -70,7 +84,7 @@ responseBodyBS (ResponseStream _ _ _) = error "unexpected ResponseStream"
 
 -- Use beforeAll / after pattern
 spec :: Spec
-spec = before mkTestRoot $ after cleanupTestRoot $
+spec = before mkTestRoot $ after cleanupTestRoot $ do
     describe "mini-httpd" $ do
         it "serves index.html for GET /" $ \root -> do
             let app = serveStatic root
@@ -147,6 +161,50 @@ spec = before mkTestRoot $ after cleanupTestRoot $
             let hs = responseHeaders resp
             lookup "X-Frame-Options" hs `shouldBe` Just "DENY"
 
+    describe "security hardening" $ do
+        it "rejects CONNECT method with 405" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkConnect "/")
+            responseStatus resp `shouldBe` status405
+
+        it "rejects OPTIONS method with 405" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkOptions "/")
+            responseStatus resp `shouldBe` status405
+
+        it "handles path with dot segment /. gracefully" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/./index.html")
+            responseStatus resp `shouldBe` status200
+
+        it "handles path with double slash // gracefully" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "//index.html")
+            responseStatus resp `shouldSatisfy` (`elem` [status200, status404])
+
+        it "blocked path traversal returns 404 not 403 (no info leak)" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/../secret")
+            responseStatus resp `shouldBe` status404
+
+        it "returns Content-Type for .txt files" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/test.txt")
+            responseStatus resp `shouldBe` status200
+            let hs = responseHeaders resp
+            lookup "Content-Type" hs `shouldBe` Just "text/plain"
+
+        it "empty path segments are handled" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app defaultRequest
+            responseStatus resp `shouldBe` status200
+
+        it "Very long path does not crash" $ \root -> do
+            let app = serveStatic root
+                longPath = BS.cons 47 (BS.replicate 500 97)
+            resp <- runApp app (mkGet longPath)
+            responseStatus resp `shouldSatisfy` (`elem` [status404, status200])
+
 mkTestRoot :: IO FilePath
 mkTestRoot = do
     -- Create a persistent temp directory
@@ -156,11 +214,13 @@ mkTestRoot = do
     let subdir = root </> "subdir"
     createDirectoryIfMissing True subdir
     BL.writeFile (subdir </> "page.html") "<html><body>Subpage</body></html>"
+    BL.writeFile (root </> "test.txt") "plain text content\n"
     pure root
 
 cleanupTestRoot :: FilePath -> IO ()
 cleanupTestRoot root = do
     removeFile (root </> "index.html")
+    removeFile (root </> "test.txt")
     removeFile (root </> "subdir/page.html")
     removeDirectoryRecursive (root </> "subdir")
     removeDirectoryRecursive root
