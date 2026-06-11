@@ -3,7 +3,7 @@
 module Main (main) where
 
 import Test.Hspec
-import Server (serveStatic)
+import Server (serveStatic, withLogging)
 import Network.Wai hiding (Response, ResponseReceived)
 import Network.Wai.Internal (Response(..), ResponseReceived(..))
 import Network.HTTP.Types
@@ -160,6 +160,13 @@ spec = before mkTestRoot $ after cleanupTestRoot $ do
             resp <- runApp app (mkGet "/")
             let hs = responseHeaders resp
             lookup "X-Frame-Options" hs `shouldBe` Just "DENY"
+
+        it "logging middleware passes through all responses unchanged" $ \root -> do
+            let app = withLogging $ serveStatic root
+            resp <- runApp app (mkGet "/")
+            responseStatus resp `shouldBe` status200
+            resp2 <- runApp app (mkHead "/")
+            responseStatus resp2 `shouldBe` status200
 
     describe "security hardening" $ do
         it "rejects CONNECT method with 405" $ \root -> do

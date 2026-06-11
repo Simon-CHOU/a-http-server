@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Server (serveStatic) where
+module Server (serveStatic, withLogging) where
 
 import Network.Wai
 import Network.HTTP.Types
@@ -13,6 +13,16 @@ import Data.Text (Text, intercalate, unpack)
 import qualified Data.Text as T
 import Network.Mime (defaultMimeLookup)
 import qualified Data.ByteString.Lazy as BL
+import System.IO (hPutStrLn, stderr)
+
+-- | Log each request: method path status after the response is sent.
+withLogging :: Middleware
+withLogging app req respond =
+    app req $ \res -> do
+        hPutStrLn stderr $ show (requestMethod req)
+            ++ " " ++ show (rawPathInfo req)
+            ++ " " ++ show (responseStatus res)
+        respond res
 
 -- | Create a WAI Application that serves static files from the given
 -- document root. Only GET and HEAD are allowed. Path-traversal attacks

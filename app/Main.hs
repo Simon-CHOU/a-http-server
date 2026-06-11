@@ -3,7 +3,7 @@
 module Main where
 
 import Network.Wai.Handler.Warp (defaultSettings, runSettings, setPort, setServerName)
-import Server (serveStatic)
+import Server (serveStatic, withLogging)
 import System.Directory (doesDirectoryExist)
 import System.Environment (lookupEnv, getArgs)
 import System.Exit (die)
@@ -25,7 +25,7 @@ main = do
       else pure ()
     putStrLn $ "mini-httpd serving " <> root <> " on http://localhost:" <> show port
     let settings = setServerName "mini-httpd" $ setPort port defaultSettings
-    runSettings settings (serveStatic root)
+    runSettings settings (withLogging $ serveStatic root)
 
 parseRoot :: [String] -> FilePath
 parseRoot ("--root":r:_) = r
