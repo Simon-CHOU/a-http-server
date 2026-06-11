@@ -135,6 +135,18 @@ spec = before mkTestRoot $ after cleanupTestRoot $
             resp <- runApp app (mkGet "/subdir/page.html")
             responseStatus resp `shouldBe` status200
 
+        it "sets X-Content-Type-Options: nosniff" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/")
+            let hs = responseHeaders resp
+            lookup "X-Content-Type-Options" hs `shouldBe` Just "nosniff"
+
+        it "sets X-Frame-Options: DENY" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/")
+            let hs = responseHeaders resp
+            lookup "X-Frame-Options" hs `shouldBe` Just "DENY"
+
 mkTestRoot :: IO FilePath
 mkTestRoot = do
     -- Create a persistent temp directory
