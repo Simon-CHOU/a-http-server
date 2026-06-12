@@ -31,14 +31,21 @@ withLogging app req respond =
 -- are prevented by canonicalizing paths and verifying they stay within
 -- the document root.
 serveStatic :: FilePath -> Application
-serveStatic root req respond =
-    case requestMethod req of
+serveStatic root req respond
+    | rawPathInfo req == "/echo-headers" = do
+        let hs  = requestHeaders req
+        let body = BL.fromStrict $ BS.pack $ show hs
+        now <- dateHeader
+        respond $ responseLBS status200
+                        (secHeaders [(hContentType, "text/plain; charset=utf-8")] ++ now)
+                        body
+    | otherwise = case requestMethod req of
       m | m == methodGet  -> serveFile root False req respond
         | m == methodHead -> serveFile root True  req respond
       _ -> do
           now <- dateHeader
           respond $ responseLBS status405
-                          (secHeaders [(hContentType, "text/plain; charset=utf-8"), (hAllow, "GET, HEAD")] ++ now)
+                          (secHeaders [(hContentType, "text/plain; charset=utf-8"), (hAllow, "GET, HEAD"), (hContentLength, "18")] ++ now)
                           "Method Not Allowed"
 
 -- | Resolve the request path against the document root, apply security
@@ -50,8 +57,12 @@ serveFile root isHead req respond = do
     case mSafe of
       Nothing -> do
           now <- dateHeader
-          respond $ responseLBS status404 (secHeaders [] ++ now) (if isHead then BL.empty else "Not Found")
+          respond $ responseLBS status404 (secHeaders [(hContentLength, if isHead then "0" else "9")] ++ now) (if isHead then BL.empty else "Not Found")
       Just filePath -> do
+          -- Note: there is a TOCTOU race between the existence check and the file read,
+          -- analogous to how a TCP sender may receive an ACK after the receiver has
+          -- already advanced its window (CS144 Lab 3). For a production server,
+          -- use ResponseFile which lets Warp handle this atomically.
           exists <- doesFileExist filePath
           if exists
             then do
@@ -66,7 +77,7 @@ serveFile root isHead req respond = do
                     respond $ responseLBS status200 headers content
             else do
                 now <- dateHeader
-                respond $ responseLBS status404 (secHeaders [] ++ now) (if isHead then BL.empty else "Not Found")
+                respond $ responseLBS status404 (secHeaders [(hContentLength, if isHead then "0" else "9")] ++ now) (if isHead then BL.empty else "Not Found")
 
 -- | Decode WAI's pathInfo (already %-decoded segments) back into a
 -- relative file path. Returns "/index.html" for root.

@@ -91,6 +91,14 @@ spec = before mkTestRoot $ after cleanupTestRoot $ do
             resp <- runApp app (mkGet "/")
             responseStatus resp `shouldBe` status200
 
+        it "/echo-headers returns 200" $ \root -> do
+            let app = serveStatic root
+            let req = (mkGet "/echo-headers") { requestHeaders = [("X-Test", "hello")] }
+            resp <- runApp app req
+            responseStatus resp `shouldBe` status200
+            body <- responseBodyBS resp
+            "X-Test" `BS.isInfixOf` body `shouldBe` True
+
         it "serves index.html for GET /index.html" $ \root -> do
             let app = serveStatic root
             resp <- runApp app (mkGet "/index.html")
@@ -100,6 +108,12 @@ spec = before mkTestRoot $ after cleanupTestRoot $ do
             let app = serveStatic root
             resp <- runApp app (mkGet "/nonexistent.html")
             responseStatus resp `shouldBe` status404
+
+        it "404 response includes Content-Length" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/nonexistent")
+            let hs = responseHeaders resp
+            lookup "Content-Length" hs `shouldSatisfy` (/= Nothing)
 
         it "sets Content-Type: text/html for .html files" $ \root -> do
             let app = serveStatic root
