@@ -119,10 +119,24 @@ spec = before mkTestRoot $ after cleanupTestRoot $ do
             body <- responseBodyBS resp
             body `shouldBe` BS.empty
 
+        it "HEAD 404 response has empty body" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkHead "/nonexistent.html")
+            responseStatus resp `shouldBe` status404
+            body <- responseBodyBS resp
+            body `shouldBe` BS.empty
+
         it "rejects POST with 405" $ \root -> do
             let app = serveStatic root
             resp <- runApp app (mkPost "/")
             responseStatus resp `shouldBe` status405
+
+        it "405 response includes Allow header" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkPost "/")
+            responseStatus resp `shouldBe` status405
+            let hs = responseHeaders resp
+            lookup "Allow" hs `shouldBe` Just "GET, HEAD"
 
         it "rejects PUT with 405" $ \root -> do
             let app = serveStatic root
@@ -160,6 +174,12 @@ spec = before mkTestRoot $ after cleanupTestRoot $ do
             resp <- runApp app (mkGet "/")
             let hs = responseHeaders resp
             lookup "X-Frame-Options" hs `shouldBe` Just "DENY"
+
+        it "includes Date header in response" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/")
+            let hs = responseHeaders resp
+            lookup "Date" hs `shouldSatisfy` (/= Nothing)
 
         it "logging middleware passes through all responses unchanged" $ \root -> do
             let app = withLogging $ serveStatic root

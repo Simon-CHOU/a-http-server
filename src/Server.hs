@@ -13,6 +13,8 @@ import Data.Text (Text, intercalate, unpack)
 import qualified Data.Text as T
 import Network.Mime (defaultMimeLookup)
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Char8 as BS
+import Data.Time (getCurrentTime, formatTime, defaultTimeLocale)
 import System.IO (hPutStrLn, stderr)
 
 -- | Log each request: method path status after the response is sent.
@@ -33,9 +35,11 @@ serveStatic root req respond =
     case requestMethod req of
       m | m == methodGet  -> serveFile root False req respond
         | m == methodHead -> serveFile root True  req respond
-      _ -> respond $ responseLBS status405
-                        (secHeaders [(hContentType, "text/plain; charset=utf-8")])
-                        "Method Not Allowed"
+      _ -> do
+          now <- dateHeader
+          respond $ responseLBS status405
+                          (secHeaders [(hContentType, "text/plain; charset=utf-8"), (hAllow, "GET, HEAD")] ++ now)
+                          "Method Not Allowed"
 
 -- | Resolve the request path against the document root, apply security
 -- checks, and serve the file if safe and it exists.
@@ -44,21 +48,25 @@ serveFile root isHead req respond = do
     let reqPath = pathToFile (pathInfo req)
     mSafe <- resolveSafe root reqPath
     case mSafe of
-      Nothing ->
-          respond $ responseLBS status404 (secHeaders []) "Not Found"
+      Nothing -> do
+          now <- dateHeader
+          respond $ responseLBS status404 (secHeaders [] ++ now) (if isHead then BL.empty else "Not Found")
       Just filePath -> do
           exists <- doesFileExist filePath
           if exists
             then do
                 let mimeExt = T.pack $ takeExtension filePath
                 let mimeCt  = defaultMimeLookup mimeExt
-                let headers = secHeaders [(hContentType, mimeCt)]
+                now <- dateHeader
+                let headers = secHeaders [(hContentType, mimeCt)] ++ now
                 if isHead
                   then respond $ responseLBS status200 headers BL.empty
                   else do
                     content <- BL.readFile filePath
                     respond $ responseLBS status200 headers content
-            else respond $ responseLBS status404 (secHeaders []) "Not Found"
+            else do
+                now <- dateHeader
+                respond $ responseLBS status404 (secHeaders [] ++ now) (if isHead then BL.empty else "Not Found")
 
 -- | Decode WAI's pathInfo (already %-decoded segments) back into a
 -- relative file path. Returns "/index.html" for root.
@@ -72,6 +80,13 @@ secHeaders hs = hs ++
     [ ("X-Content-Type-Options", "nosniff")
     , ("X-Frame-Options", "DENY")
     ]
+
+-- | Generate an HTTP Date header for the current UTC time (RFC 7231 §7.1.1.2)
+dateHeader :: IO ResponseHeaders
+dateHeader = do
+    now <- getCurrentTime
+    let dateStr = formatTime defaultTimeLocale "%a, %d %b %Y %H:%M:%S GMT" now
+    pure [("Date", BS.pack dateStr)]
 
 -- | Resolve reqPath (starting with /) against the document root.
 -- Returns Nothing if the resolved path escapes the root (path traversal)
