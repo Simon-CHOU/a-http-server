@@ -6,12 +6,18 @@ import Network.Wai.Handler.Warp (defaultSettings, runSettings, setPort, setServe
 import Server (serveStatic, withLogging)
 import System.Directory (doesDirectoryExist)
 import System.Environment (lookupEnv, getArgs)
-import System.Exit (die)
+import System.Exit (die, exitSuccess)
+import System.IO.Error (isAlreadyInUseError)
+import Control.Exception (catch, IOException)
 import Text.Read (readMaybe)
 
 main :: IO ()
 main = do
     args <- getArgs
+    -- Handle --version flag before anything else
+    case args of
+      ("--version":_) -> putStrLn "mini-httpd 0.1.0" >> exitSuccess
+      _               -> pure ()
     let root = parseRoot args
     port <- parsePort
     -- Validate document root
@@ -25,7 +31,13 @@ main = do
       else pure ()
     putStrLn $ "mini-httpd serving " <> root <> " on http://localhost:" <> show port
     let settings = setServerName "mini-httpd" $ setPort port defaultSettings
-    runSettings settings (withLogging $ serveStatic root)
+    let app = withLogging $ serveStatic root
+    catch (runSettings settings app) handleBindError
+  where
+    handleBindError :: IOException -> IO ()
+    handleBindError e
+        | isAlreadyInUseError e = die $ "Error: port already in use"
+        | otherwise = ioError e
 
 parseRoot :: [String] -> FilePath
 parseRoot ("--root":r:_) = r

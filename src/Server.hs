@@ -39,6 +39,26 @@ serveStatic root req respond
         respond $ responseLBS status200
                         (secHeaders [(hContentType, "text/plain; charset=utf-8")] ++ now)
                         body
+    | rawPathInfo req == "/status" = case requestMethod req of
+        m | m == methodGet -> do
+            now <- dateHeader
+            let body = BL.fromStrict $ BS.pack $
+                    "server: mini-httpd/0.1.0\n" <>
+                    "document-root: " <> root <> "\n" <>
+                    "allowed-methods: GET, HEAD\n"
+            respond $ responseLBS status200
+                            (secHeaders [(hContentType, "text/plain; charset=utf-8")] ++ now)
+                            body
+          | m == methodHead -> do
+            now <- dateHeader
+            respond $ responseLBS status200
+                            (secHeaders [(hContentType, "text/plain; charset=utf-8")] ++ now)
+                            BL.empty
+          | otherwise -> do
+            now <- dateHeader
+            respond $ responseLBS status405
+                            (secHeaders [(hContentType, "text/plain; charset=utf-8"), (hAllow, "GET, HEAD"), (hContentLength, "18")] ++ now)
+                            "Method Not Allowed"
     | otherwise = case requestMethod req of
       m | m == methodGet  -> serveFile root False req respond
         | m == methodHead -> serveFile root True  req respond

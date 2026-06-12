@@ -13,6 +13,7 @@ import Control.Concurrent.MVar
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
 
 main :: IO ()
 main = hspec spec
@@ -194,6 +195,47 @@ spec = before mkTestRoot $ after cleanupTestRoot $ do
             resp <- runApp app (mkGet "/")
             let hs = responseHeaders resp
             lookup "Date" hs `shouldSatisfy` (/= Nothing)
+
+        it "GET /status returns 200" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/status")
+            responseStatus resp `shouldBe` status200
+
+        it "GET /status returns version in body" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/status")
+            body <- responseBodyBS resp
+            "mini-httpd/0.1.0" `BS.isInfixOf` body `shouldBe` True
+
+        it "GET /status returns allowed-methods in body" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/status")
+            body <- responseBodyBS resp
+            "allowed-methods: GET, HEAD" `BS.isInfixOf` body `shouldBe` True
+
+        it "GET /status includes document-root in body" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/status")
+            body <- responseBodyBS resp
+            BSC.pack root `BS.isInfixOf` body `shouldBe` True
+
+        it "GET /status returns text/plain content type" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkGet "/status")
+            let hs = responseHeaders resp
+            lookup "Content-Type" hs `shouldBe` Just "text/plain; charset=utf-8"
+
+        it "HEAD /status returns 200 with empty body" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkHead "/status")
+            responseStatus resp `shouldBe` status200
+            body <- responseBodyBS resp
+            body `shouldBe` BS.empty
+
+        it "POST /status returns 405" $ \root -> do
+            let app = serveStatic root
+            resp <- runApp app (mkPost "/status")
+            responseStatus resp `shouldBe` status405
 
         it "logging middleware passes through all responses unchanged" $ \root -> do
             let app = withLogging $ serveStatic root
